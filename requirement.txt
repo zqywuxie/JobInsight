@@ -1,0 +1,8 @@
+asyncio
+re
+matplotlib
+pandas
+seaborn
+pyppeteer
+sqlalchemy
+plotly
