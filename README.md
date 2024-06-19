@@ -4,7 +4,7 @@
 
 ------
 
-本项目旨在利用网络爬虫技术和数据可视化手段，对招聘网站（例如Boss直聘）上的岗位信息进行分析。当前阶段的分析主要集中在薪资水平，后续将逐步扩展到其他方面的分析，如岗位需求、工作地点分布、公司规模等。
+本项目旨在利用网络爬虫技术和数据可视化手段，对招聘网站（例如Boss直聘）上的岗位信息进行分析。当前阶段的分析主要集中在薪资水平**，后续将逐步扩展到其他方面的分析，如岗位需求、工作地点分布、公司规模等。**
 
 ## 项目背景
 
@@ -15,6 +15,12 @@
 ## 快速上手
 
 ------
+
+- 下载项目
+
+~~~python
+git clone https://github.com/zqywuxie/JobInsight.git
+~~~
 
 - 控制台输入指令下载库
 
@@ -34,9 +40,21 @@ engine = create_engine('mysql+pymysql://root:密码.@localhost:3306/数据库表
 
 ***2. 本项目原本采用csv文件，对于城市名获取对应的城市ID，但是Boss官网对于城市ID的使用有些问题(猜想就是为了防止爬虫)；***
 
-***默认地址为成都;如果需要爬取其他地方的信息,自行前往官网***
+***默认地址为成都;如果需要爬取其他地方的信息,自行前往官网***[Boss官方](https://www.zhipin.com/web/geek/job?query=%E5%89%8D%E7%AB%AF&city=101270100) 
 
-[Boss官方](https://www.zhipin.com/web/geek/job?query=%E5%89%8D%E7%AB%AF&city=101270100) ***选择一个城市获取URL后面的获得city=xxx，修改location_id***
+***选择一个城市获取URL后面的获得city=xxx，修改location_id***
+
+![image-20240619195648754](https://wuxie-image.oss-cn-chengdu.aliyuncs.com/image-20240619195648754.png)
+
+替换
+
+~~~python
+if __name__ == '__main__':
+    .........
+    location_id = "101270100"  # 成都
+    .........
+
+~~~
 
 
 
@@ -57,6 +75,8 @@ def data_show(position):
 
 ------
 
+**plot_avg_salary_plus：** 
+
 可以点击公司名进行跳转boss官网
 
 ![image-20240619193556390](https://wuxie-image.oss-cn-chengdu.aliyuncs.com/image-20240619193556390.png)
@@ -67,6 +87,6 @@ def data_show(position):
 
 ------
 
-
+**plot_avg_salary：**
 
 ![image-20240619193650697](https://wuxie-image.oss-cn-chengdu.aliyuncs.com/image-20240619193650697.png)
