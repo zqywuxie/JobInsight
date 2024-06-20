@@ -1,4 +1,5 @@
 import asyncio
+import os.path
 import re
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import plotly.express as px
+from sqlalchemy import exists
 
 Base = declarative_base()
 MAX_DESCRIPTION_LENGTH = 1024
@@ -24,11 +26,13 @@ class Job(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255))
     area = Column(String(255))
-    salary = Column(String(255))
+    # salary = Column(String(255))
     description = Column(String(1024))
     link = Column(String(1024))
     company = Column(String(255))
     position = Column(String(255))
+    min_salary = Column(String(255))
+    max_salary = Column(String(255))
 
 
 # 提取最高和最低薪资
@@ -67,7 +71,9 @@ async def start_spider(position, city):
     total_page = int(total_page)
 
     all_jobs = []
+    print(f"==============一共搜索到{total_page}页数据，开始爬取请耐心等待==============")
     for i in range(1, total_page + 1):
+        print(f"=============={i}/{total_page} 数据爬取中==============")
         await page.goto(f'https://www.zhipin.com/web/geek/job?query={position}&city={city}&page={i}')
         await page.waitForSelector('.job-list-box')
 
@@ -86,28 +92,36 @@ async def start_spider(position, city):
             });
             return jobs;
         }''')
-        all_jobs.extend(jobs)
 
+        all_jobs.extend(jobs)
+        print(f"=============={i}/{total_page} 数据爬取成功==============")
+
+    print(f"==============共搜索到{len(all_jobs)}条数据，开始处理==============")
     for job in all_jobs:
-        await page.goto(job['link'])
-        try:
-            await page.waitForSelector('.job-sec-text')
-            job_desc = await page.evaluate('(document.querySelector(".job-sec-text").textContent)')
-            job['description'] = job_desc.strip()[:MAX_DESCRIPTION_LENGTH]  # 截断描述
-            new_job = Job(
-                name=job['name'],
-                area=job['area'],
-                salary=job['salary'],
-                description=job['description'],
-                link=job['link'],
-                company=job['company'],
-                position=position
-            )
-            session.add(new_job)
-            session.commit()
-            print(job)
-        except Exception as e:
-            print(f'Error: {str(e)}')
+        # 检查数据库是否已存在相同职位信息
+        job_exists = session.query(exists().where(Job.company == job['company'])).scalar()
+        if not job_exists:
+            job['min_salary'], job['max_salary'] = extract_salary(job['salary'])
+            await page.goto(job['link'])
+            try:
+                await page.waitForSelector('.job-sec-text')
+                job_desc = await page.evaluate('(document.querySelector(".job-sec-text").textContent)')
+                job['description'] = job_desc.strip()[:MAX_DESCRIPTION_LENGTH]  # 截断描述
+                new_job = Job(
+                    name=job['name'],
+                    area=job['area'],
+                    min_salary=job['min_salary'],
+                    max_salary=job['max_salary'],
+                    description=job['description'],
+                    link=job['link'],
+                    company=job['company'],
+                    position=position
+                )
+                session.add(new_job)
+                session.commit()
+                print(job)
+            except Exception as e:
+                print(f'Error: {str(e)}')
 
     await browser.close()
     data_show(position)
@@ -166,7 +180,7 @@ def plot_avg_salary_plus(avg_salary_by_company, position):
         (8, 10),
         (10, 15),
         (15, 20),
-        (20,float('inf'))
+        (20, float('inf'))
     ]
 
     salary_percentage_text = ""
@@ -246,12 +260,13 @@ def plot_avg_salary(avg_salary_by_company, position):
 # 数据展示函数
 def data_show(position):
     # 查询数据
-    query = f"SELECT name, area, salary, description, link, company FROM jobs WHERE position = '{position}'"
+    query = f"SELECT name, company,area, min_salary, max_salary,description, link FROM jobs WHERE position like '{position}'"
     df = pd.read_sql(query, engine)
-    df[['min_salary', 'max_salary']] = df['salary'].apply(lambda x: pd.Series(extract_salary(x)))
     df.dropna(subset=['min_salary', 'max_salary'], inplace=True)
 
-    # 可视化不同公司的平均薪资
+    # 转换薪资列为数值类型
+    df['min_salary'] = pd.to_numeric(df['min_salary'], errors='coerce')
+    df['max_salary'] = pd.to_numeric(df['max_salary'], errors='coerce')
     # 根据公司的平均最低薪资进行排序
     avg_salary_by_company = df.groupby('company').agg({
         'min_salary': 'mean',
@@ -262,7 +277,20 @@ def data_show(position):
     # 根据平均最低薪资进行排序
     avg_salary_by_company = avg_salary_by_company.sort_values(by='min_salary')
 
+    save_data_to_csv(df, position, 'min_salary')
     plot_avg_salary_plus(avg_salary_by_company, position)
+
+
+def save_data_to_csv(df, position, sort_by=None, ascending=True):
+    if sort_by in ['min_salary', 'max_salary']:
+        df = df.sort_values(by=sort_by, ascending=ascending)
+
+    csv_filename = f"{position}_jobs.csv"
+    if os.path.exists(csv_filename):
+        os.remove(csv_filename)
+        print(f"Existing file '{csv_filename}' deleted.")
+    df.to_csv(csv_filename, index=False, encoding='utf-8')
+    print(f"Data saved to {csv_filename}")
 
 
 """
@@ -287,16 +315,16 @@ def get_location_id_from_csv(file_path, city_name_zh):
 
 if __name__ == '__main__':
     position = input("请输入要查询的职位关键词（例如：前端）: ").strip()
-    # """
-    # # # city = input("请输入要查询的城市(例如: 成都) : ").strip()
-    # # # location_id = get_location_id_from_csv("China-City-List-latest.csv", city)
-    # # # https://www.zhipin.com/web/geek/job?query=%E5%89%8D%E7%AB%AF&city=101270100
-    # # # 因为boss官网的cityId对不上号,默认地址为成都;如果需要爬取其他地方的信息,自行前往上方官方 获得city=xxx
-    # """
+#     # # """
+#     # # # # city = input("请输入要查询的城市(例如: 成都) : ").strip()
+#     # # # # location_id = get_location_id_from_csv("China-City-List-latest.csv", city)
+#     # # # # https://www.zhipin.com/web/geek/job?query=%E5%89%8D%E7%AB%AF&city=101270100
+#     # # # # 因为boss官网的cityId对不上号,默认地址为成都;如果需要爬取其他地方的信息,自行前往上方官方 获得city=xxx
+#     # # """
     location_id = "101270100"  # 成都
-    # #  print(location_id)
+#     # # #  print(location_id)
     asyncio.get_event_loop().run_until_complete(start_spider(position, location_id))
-    #
-    # # 绘制图表
+#     # #
+#     # # # 绘制图表
     data_show(position)
-    # data_show("Java实习")
+#     data_show("大数据")
