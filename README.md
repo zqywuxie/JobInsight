@@ -80,8 +80,10 @@ def data_show(position):
 可以点击公司名进行跳转boss官网
 
 ![image-20240619193556390](https://wuxie-image.oss-cn-chengdu.aliyuncs.com/image-20240619193556390.png)
+注：数据太多可以导致数据展示密集，可以拖动x轴进行扩大区间查看
 
-
+**薪资区间分析展示**
+![img.png](images/img.png)
 
 ![image-20240619193619778](https://wuxie-image.oss-cn-chengdu.aliyuncs.com/image-20240619193619778.png)
 

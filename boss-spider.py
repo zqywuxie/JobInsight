@@ -40,8 +40,8 @@ def extract_salary(salary):
     elif '元/天' in salary:
         salary_range = re.findall(r'(\d+)-(\d+)', salary)
         if salary_range:
-            min_salary = int(salary_range[0][0]) / 1000
-            max_salary = int(salary_range[0][1]) / 1000
+            min_salary = (int(salary_range[0][0]) * 30) / 1000  # 转换为月薪
+            max_salary = (int(salary_range[0][1]) * 30) / 1000  # 转换为月薪
             return min_salary, max_salary
     elif '元/月' in salary:
         salary_range = re.findall(r'(\d+)-(\d+)', salary)
@@ -114,8 +114,6 @@ async def start_spider(position, city):
     session.close()
 
 
-# 绘图
-# 可视化函数(动态)
 def plot_avg_salary_plus(avg_salary_by_company, position):
     # 添加自定义数据，用于悬停时显示更多信息
     avg_salary_by_company['text'] = avg_salary_by_company.apply(
@@ -128,8 +126,11 @@ def plot_avg_salary_plus(avg_salary_by_company, position):
 
     fig = go.Figure()
 
+    # 调整索引，使得每个数据点之间有一定间隔
+    avg_salary_by_company['index'] = avg_salary_by_company.index * 2
+
     # 绘制最低薪资折线
-    fig.add_trace(go.Scatter(x=avg_salary_by_company['company'], y=avg_salary_by_company['min_salary'],
+    fig.add_trace(go.Scatter(x=avg_salary_by_company['index'], y=avg_salary_by_company['min_salary'],
                              mode='lines+markers', name='最低薪资',
                              line=dict(color='blue', width=2),
                              marker=dict(color='blue', size=8),
@@ -137,7 +138,7 @@ def plot_avg_salary_plus(avg_salary_by_company, position):
                              hoverinfo='text'))
 
     # 绘制最高薪资折线
-    fig.add_trace(go.Scatter(x=avg_salary_by_company['company'], y=avg_salary_by_company['max_salary'],
+    fig.add_trace(go.Scatter(x=avg_salary_by_company['index'], y=avg_salary_by_company['max_salary'],
                              mode='lines+markers', name='最高薪资',
                              line=dict(color='red', width=2),
                              marker=dict(color='red', size=8),
@@ -150,8 +151,40 @@ def plot_avg_salary_plus(avg_salary_by_company, position):
         label = f"<a href='{link}' target='_blank'>{company}</a>"
         x_labels.append(label)
 
-    # 设置 x 轴标签和超链接
-    fig.update_xaxes(type='category', tickmode='array', tickvals=list(range(len(x_labels))), ticktext=x_labels)
+    # 设置 x 轴标签和超链接，增加展示间隔
+    tickvals = avg_salary_by_company['index']
+    fig.update_xaxes(type='category', tickmode='array', tickvals=tickvals, ticktext=x_labels)
+
+    # 计算薪资区间百分比
+    min_salaries = avg_salary_by_company['min_salary']
+
+    total_entries = len(avg_salary_by_company)
+    salary_ranges = [
+        (0, 3),
+        (3, 5),
+        (5, 8),
+        (8, 10),
+        (10, 15),
+        (15, 20),
+        (20,float('inf'))
+    ]
+
+    salary_percentage_text = ""
+    for i, (low, high) in enumerate(salary_ranges):
+        range_count = len(min_salaries[(min_salaries >= low) & (min_salaries < high)])
+        range_percentage = range_count / total_entries * 100
+        salary_percentage_text += f"{low}-{high}K: {range_percentage:.1f}%<br>"
+
+    # 在图表左上角添加薪资区间百分比文本
+    fig.add_annotation(
+        text=salary_percentage_text,
+        xref="paper", yref="paper",
+        x=0.01, y=0.99,
+        showarrow=False,
+        font=dict(size=12, color="black"),
+        align="left",
+        bordercolor="black", borderwidth=1
+    )
 
     fig.update_layout(
         title={
@@ -172,33 +205,42 @@ def plot_avg_salary_plus(avg_salary_by_company, position):
 
 
 def plot_avg_salary(avg_salary_by_company, position):
-    sns.set(style="whitegrid")
+    # 按每页20个公司进行分页显示
+    num_pages = (len(avg_salary_by_company) - 1) // 20 + 1
+    for page in range(num_pages):
+        start_idx = page * 20
+        end_idx = min((page + 1) * 20, len(avg_salary_by_company))
+        avg_salary_page = avg_salary_by_company.iloc[start_idx:end_idx]
 
-    # 设置中文字体
-    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']  # 指定默认字体
-    plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
+        print(avg_salary_page)
+        # 绘制交互式图表
+        sns.set(style="whitegrid")
 
-    plt.figure(figsize=(14, 8))
-    plt.plot(avg_salary_by_company['company'], avg_salary_by_company['min_salary'], marker='o', label='最低工资')
-    plt.plot(avg_salary_by_company['company'], avg_salary_by_company['max_salary'], marker='o', label='最高工资')
+        # 设置中文字体
+        plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']  # 指定默认字体
+        plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
 
-    # 在每个数据点上显示具体数值
-    for i, row in avg_salary_by_company.iterrows():
-        plt.annotate(f"{row['min_salary']:.1f}", (row['company'], row['min_salary']), textcoords="offset points",
-                     xytext=(0, 5), ha='center')
-        plt.annotate(f"{row['max_salary']:.1f}", (row['company'], row['max_salary']), textcoords="offset points",
-                     xytext=(0, 5), ha='center')
+        plt.figure(figsize=(14, 8))
+        plt.plot(avg_salary_page['company'], avg_salary_page['min_salary'], marker='o', label='最低工资')
+        plt.plot(avg_salary_page['company'], avg_salary_page['max_salary'], marker='o', label='最高工资')
 
-    # 显示职位名称和分页信息
-    plt.title(f'不同公司{position}职位的平均薪资', fontsize=16)
-    plt.xlabel('公司', fontsize=14)
-    plt.ylabel('薪资 (K)', fontsize=14)
-    plt.xticks(rotation=90, fontsize=12)
-    plt.yticks(fontsize=12)
-    plt.legend(fontsize=12)
-    plt.tight_layout()
+        # 在每个数据点上显示具体数值
+        for i, row in avg_salary_page.iterrows():
+            plt.annotate(f"{row['min_salary']:.1f}", (row['company'], row['min_salary']), textcoords="offset points",
+                         xytext=(0, 5), ha='center')
+            plt.annotate(f"{row['max_salary']:.1f}", (row['company'], row['max_salary']), textcoords="offset points",
+                         xytext=(0, 5), ha='center')
 
-    plt.show()
+        # 显示职位名称和分页信息
+        plt.title(f'不同公司{position}职位的平均薪资', fontsize=16)
+        plt.xlabel('公司', fontsize=14)
+        plt.ylabel('薪资 (K)', fontsize=14)
+        plt.xticks(rotation=90, fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.legend(fontsize=12)
+        plt.tight_layout()
+
+        plt.show()
 
 
 # 数据展示函数
@@ -220,16 +262,7 @@ def data_show(position):
     # 根据平均最低薪资进行排序
     avg_salary_by_company = avg_salary_by_company.sort_values(by='min_salary')
 
-    # 按每页20个公司进行分页显示
-    num_pages = (len(avg_salary_by_company) - 1) // 20 + 1
-    for page in range(num_pages):
-        start_idx = page * 20
-        end_idx = min((page + 1) * 20, len(avg_salary_by_company))
-        avg_salary_page = avg_salary_by_company.iloc[start_idx:end_idx]
-
-        print(avg_salary_page)
-        # 绘制交互式图表
-        plot_avg_salary(avg_salary_page, position)
+    plot_avg_salary_plus(avg_salary_by_company, position)
 
 
 """
@@ -254,15 +287,16 @@ def get_location_id_from_csv(file_path, city_name_zh):
 
 if __name__ == '__main__':
     position = input("请输入要查询的职位关键词（例如：前端）: ").strip()
-    """
-    # # city = input("请输入要查询的城市(例如: 成都) : ").strip()
-    # # location_id = get_location_id_from_csv("China-City-List-latest.csv", city)
-    # # https://www.zhipin.com/web/geek/job?query=%E5%89%8D%E7%AB%AF&city=101270100
-    # # 因为boss官网的cityId对不上号,默认地址为成都;如果需要爬取其他地方的信息,自行前往上方官方 获得city=xxx
-    """
+    # """
+    # # # city = input("请输入要查询的城市(例如: 成都) : ").strip()
+    # # # location_id = get_location_id_from_csv("China-City-List-latest.csv", city)
+    # # # https://www.zhipin.com/web/geek/job?query=%E5%89%8D%E7%AB%AF&city=101270100
+    # # # 因为boss官网的cityId对不上号,默认地址为成都;如果需要爬取其他地方的信息,自行前往上方官方 获得city=xxx
+    # """
     location_id = "101270100"  # 成都
-    #  print(location_id)
+    # #  print(location_id)
     asyncio.get_event_loop().run_until_complete(start_spider(position, location_id))
-
-    # 绘制图表
+    #
+    # # 绘制图表
     data_show(position)
+    # data_show("Java实习")
