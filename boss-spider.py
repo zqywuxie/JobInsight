@@ -285,7 +285,11 @@ def save_data_to_csv(df, position, sort_by=None, ascending=True):
     if sort_by in ['min_salary', 'max_salary']:
         df = df.sort_values(by=sort_by, ascending=ascending)
 
-    csv_filename = f"{position}_jobs.csv"
+    data_folder = 'data'
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+
+    csv_filename = os.path.join(data_folder, f"{position}_jobs.csv")
     if os.path.exists(csv_filename):
         os.remove(csv_filename)
         print(f"Existing file '{csv_filename}' deleted.")
